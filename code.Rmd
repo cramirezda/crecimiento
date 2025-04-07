@@ -1,0 +1,343 @@
+---
+title: "Impacto de los subsidios a la electricidad en el bienestar de los consumidores"
+author: "Carlos Fernando Ramírez Dávila"
+date: "2025-04-07"
+output: pdf_document
+---
+Se presenta un esbozo y trabajo en proceso para la medición del impacto de los subsidios a la tarifas eléctricas en el bienestar de los consumidores. Si bien es un trabajo inconcluso, lo que se busca es detallar algunas de las distribuciones y estadísticas más relevantes del gasto en electricidad de los hogares a través de datos obtenidos en la ENIGH 2016-2022 y en la Encuesta Nacional sobre Consumo de Energéticos en Viviendas Particulares (ENCEVI) 2018.
+
+Se quiere analizar la evolución del gasto en los hogares a lo largo del tiempo, así como la distribución de la proporción del gasto en electricidad con respecto al gasto de los hogares.
+
+Asimismo, un trabajo posterior será el cálculo del acceso a la electricidad con respecto a los subsidios, los cuales se calcularán tomando en consideración el esquema tarifario de CFE.
+
+Además, se planea realizar una regresión tipo panel que incluya como variables categóricas la entidad y el esquema tarifario (si bien solo en la encevi se tiene la información de tipo de tarifa, se intentará determina el esquema tarifario para la información de la enigh tomando en cuenta la entidad y la temperatura promedio en verano para cada estado, al igual que el gasto en electricidad, asumiento que, para cierto intervalo de gasto, es posible que se encuentre en determinado  esquema tarifario [aunque esto no parece ser consistente con la  gráfica Distribución del gasto en electricidad por tipo de tarifa sobre la distribución del gasto con respecto al esquema tarifario, aún así ésta se encuentra sujeta a revisión debido a que cuenta con posibles errores de muestreo {nadie para 90,000 MXN de electricidad, aún así no corresponde con 99,999= no sabe del cuestionario}])
+
+
+```{r}
+setwd('C:/Users/D20343/Desktop/itams/proyecto_desarrollo/')
+data_dir <- 'data/'
+res_dir <- 'results/'
+```
+
+```{r echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+cargar_paquetes_utiles <- function() {
+  paquetes <- c(
+    "readr",      # leer CSV
+    "readxl",     # leer Excel
+    "dplyr",      # manipular data frames
+    "tidyr",      # limpiar y transformar datos
+    "ggplot2",    # gráficos (histogramas, scatter, etc.)
+    "openxlsx",   # exportar a Excel
+    "writexl",    # otra opción para exportar Excel
+    "janitor"     # limpiar nombres de columnas
+  )
+
+ 
+  nuevos <- paquetes[!paquetes %in% installed.packages()[, "Package"]]
+  if (length(nuevos)) install.packages(nuevos)
+
+  
+  invisible(lapply(paquetes, library, character.only = TRUE))
+  
+  message("Todos los paquetes fueron cargados correctamente.")
+}
+
+cargar_paquetes_utiles()
+
+
+```
+
+Cargar las bases de datos
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+c_2022 <- paste0(data_dir,'enigh_2022/')
+gasto_enigh_2022 <- read_csv(paste0(c_2022,'gastoshogar.csv'))
+ingreso_enigh_2022 <- read_csv(paste0(c_2022,'conjunto_de_datos_ingresos_enigh2022_ns.csv'))
+
+c_encevi_2018 <- paste0(data_dir,'encevi_2018/')
+encevi_2018 <- read_csv(paste0(c_encevi_2018,'encevi.csv'))
+
+c_2020 <- paste0(data_dir,'enigh_2020/')
+gasto_enigh_2020 <- read_csv(paste0(c_2020,'gastoshogar.csv'))
+ingreso_enigh_2020 <- read_csv(paste0(c_2020,'conjunto_de_datos_ingresos_enigh_2020_ns.csv'))
+
+c_2018 <- paste0(data_dir,'enigh_2018/')
+gasto_enigh_2018 <- read_csv(paste0(c_2018,'gastoshogar.csv'))
+ingreso_enigh_2018 <- read_csv(paste0(c_2018,'conjunto_de_datos_ingresos_enigh_2018_ns.csv'))
+
+c_2016 <- paste0(data_dir,'enigh_2016/')
+gasto_enigh_2016 <- read_csv(paste0(c_2016,'gastoshogar.csv'))
+ingreso_enigh_2016 <- read_csv(paste0(c_2016,'conjunto_de_datos_ingresos_enigh_2016_ns.csv'))
+
+```
+
+Enigh 2022
+
+```{r}
+gasto_enigh_2022 <- gasto_enigh_2022 %>%select(folioviv,clave,gasto_tri)
+gasto_enigh_2022 <- gasto_enigh_2022 %>% mutate (gasto_tri = as.numeric(gasto_tri)) %>%
+  mutate(folioviv = as.numeric(folioviv)) %>% mutate(clave= as.character(clave))%>%filter(clave=='R001')%>%
+  filter(!is.na(gasto_tri))
+ingreso_enigh_2022 <- ingreso_enigh_2022 %>% select(folioviv,ing_tri) %>%
+  mutate(folioviv=as.numeric(folioviv))%>%mutate(ing_tri=as.numeric(ing_tri))
+
+enigh_2022 <- merge(gasto_enigh_2022,ingreso_enigh_2022, by='folioviv')%>%mutate(anio = 2022)
+print(summary(enigh_2022))
+print(head(enigh_2022))
+```
+
+encevi 2018
+
+```{r}
+df_encevi_2018 <- encevi_2018 %>% select(folio,cons_med1,cons_med2,tipo_tarif)%>%
+  mutate(cons_med1=as.numeric(cons_med1))%>%mutate(cons_med2=as.numeric(cons_med2))%>%
+  mutate(cons_med2 = ifelse(is.na(cons_med2), 0, cons_med2))%>%
+  mutate(cons_med1 = ifelse(is.na(cons_med1), 0, cons_med1))%>%
+  mutate(folio=as.numeric(folio))%>%mutate(tipo_tarif=as.numeric(tipo_tarif))%>%
+  filter(cons_med1!=99999 & cons_med2!=99999)%>%
+  mutate(cons_elect=cons_med1+cons_med2)%>%
+  filter(cons_elect != 0)%>% mutate(anio = 2018)
+print(summary(df_encevi_2018))
+print(head(df_encevi_2018))
+```
+
+enigh 2020
+
+```{r}
+gasto_enigh_2020 <- gasto_enigh_2020 %>%select(folioviv,clave,gasto_tri)
+gasto_enigh_2020 <- gasto_enigh_2020 %>% mutate (gasto_tri = as.numeric(gasto_tri)) %>%
+  mutate(folioviv = as.numeric(folioviv)) %>% mutate(clave= as.character(clave))%>%filter(clave=='R001')%>%
+  filter(!is.na(gasto_tri))
+
+ingreso_enigh_2020 <- ingreso_enigh_2020 %>% select(folioviv,ing_tri) %>%
+  mutate(folioviv=as.numeric(folioviv))%>%mutate(ing_tri=as.numeric(ing_tri))
+
+enigh_2020 <- merge(gasto_enigh_2020,ingreso_enigh_2020, by='folioviv')%>%mutate(anio = 2020)
+print(summary(enigh_2020))
+print(head(enigh_2020))
+
+```
+
+enigh 2018
+
+```{r}
+gasto_enigh_2018 <- gasto_enigh_2018 %>%select(folioviv,clave,gasto_tri)
+gasto_enigh_2018 <- gasto_enigh_2018 %>% mutate (gasto_tri = as.numeric(gasto_tri)) %>%
+  mutate(folioviv = as.numeric(folioviv)) %>% mutate(clave= as.character(clave))%>%filter(clave=='R001')%>%
+  filter(!is.na(gasto_tri))
+
+ingreso_enigh_2018 <- ingreso_enigh_2018 %>% select(folioviv,ing_tri) %>%
+  mutate(folioviv=as.numeric(folioviv))%>%mutate(ing_tri=as.numeric(ing_tri))
+
+enigh_2018 <- merge(gasto_enigh_2018,ingreso_enigh_2018, by='folioviv')%>%mutate(anio = 2018)
+print(summary(enigh_2018))
+print(head(enigh_2018))
+```
+
+enigh 2016
+
+```{r}
+gasto_enigh_2016 <- gasto_enigh_2016 %>%select(folioviv,clave,gasto_tri)
+gasto_enigh_2016 <- gasto_enigh_2016 %>% mutate (gasto_tri = as.numeric(gasto_tri)) %>%
+  mutate(folioviv = as.numeric(folioviv)) %>% mutate(clave= as.character(clave))%>%filter(clave=='R001')%>%
+  filter(!is.na(gasto_tri))
+
+ingreso_enigh_2016 <- ingreso_enigh_2016 %>% select(folioviv,ing_tri) %>%
+  mutate(folioviv=as.numeric(folioviv))%>%mutate(ing_tri=as.numeric(ing_tri))
+
+enigh_2016 <- merge(gasto_enigh_2016,ingreso_enigh_2016, by='folioviv')%>%mutate(anio = 2016)
+  
+print(summary(enigh_2016))
+print(head(enigh_2016))
+```
+
+correción de datos
+
+```{r}
+procesar_enigh <- function(base) {
+  base %>%
+    group_by(folioviv, anio) %>%
+    summarise(
+      ingreso_total = sum(ing_tri, na.rm = TRUE),
+      gasto_tri = first(gasto_tri)  # asumiendo que es constante dentro de la vivienda
+    ) %>%
+    ungroup()
+}
+
+enigh_2016 <- procesar_enigh(enigh_2016)
+enigh_2018 <- procesar_enigh(enigh_2018)
+enigh_2020 <- procesar_enigh(enigh_2020)
+enigh_2022 <- procesar_enigh(enigh_2022)
+
+enigh_2016 <- enigh_2016 %>%
+  filter(!is.na(gasto_tri))
+enigh_2018 <- enigh_2018 %>%
+  filter(!is.na(gasto_tri))
+enigh_2020 <- enigh_2020 %>%
+  filter(!is.na(gasto_tri))
+enigh_2022 <- enigh_2022 %>%
+  filter(!is.na(gasto_tri))
+
+```
+
+Cálculo de ratios
+
+```{r}
+enigh_2016 <-enigh_2016 %>% mutate(ratio=(gasto_tri/ingreso_total))%>%
+  filter(ratio<1)
+enigh_2018 <-enigh_2018 %>% mutate(ratio=(gasto_tri/ingreso_total))%>%
+  filter(ratio<1)
+enigh_2020 <-enigh_2020 %>% mutate(ratio=(gasto_tri/ingreso_total))%>%
+  filter(ratio<1)
+enigh_2022 <-enigh_2022 %>% mutate(ratio=(gasto_tri/ingreso_total))%>%
+  filter(ratio<1)
+```
+
+Distribuciones
+
+ENIGH 2022
+
+```{r}
+enigh_2022 <- enigh_2022 %>%
+  mutate(decil_ingreso = ntile(ingreso_total, 10))
+
+ggplot(enigh_2022, aes(x = factor(decil_ingreso), y = ratio)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Proporción del gasto en electricidad por decil de ingreso",
+       x = "Decil de ingreso", y = "Proporción de gasto en electricidad") +
+  theme_minimal()
+
+
+```
+
+ENIGH 2020
+
+```{r}
+enigh_2020 <- enigh_2020 %>%
+  mutate(decil_ingreso = ntile(ingreso_total, 10))
+
+ggplot(enigh_2020, aes(x = factor(decil_ingreso), y = ratio)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Proporción del gasto en electricidad por decil de ingreso",
+       x = "Decil de ingreso", y = "Proporción de gasto en electricidad") +
+  theme_minimal()
+```
+
+ENIGH 2018
+
+```{r}
+enigh_2018 <- enigh_2018 %>%
+  mutate(decil_ingreso = ntile(ingreso_total, 10))
+
+ggplot(enigh_2018, aes(x = factor(decil_ingreso), y = ratio)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Proporción del gasto en electricidad por decil de ingreso",
+       x = "Decil de ingreso", y = "Proporción de gasto en electricidad") +
+  theme_minimal()
+```
+
+ENIGH 2016
+
+```{r}
+enigh_2016 <- enigh_2016 %>%
+  mutate(decil_ingreso = ntile(ingreso_total, 10))
+
+ggplot(enigh_2016, aes(x = factor(decil_ingreso), y = ratio)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Proporción del gasto en electricidad por decil de ingreso",
+       x = "Decil de ingreso", y = "Proporción de gasto en electricidad") +
+  theme_minimal()
+```
+
+
+Gasto promedio en electricidad por decil de ingreso (2016–2022)
+
+```{r}
+enigh <- bind_rows(enigh_2016, enigh_2018, enigh_2020, enigh_2022)
+
+
+panel_ids <- enigh %>%
+  group_by(folioviv) %>%
+  summarise(n_anios = n_distinct(anio)) %>%
+  filter(n_anios == 2)
+
+enigh_panel <- enigh %>%
+  filter(folioviv %in% panel_ids$folioviv)
+
+enigh_panel <- enigh_panel %>%
+  group_by(anio) %>%
+  mutate(decil = ntile(ingreso_total, 10)) %>%
+  ungroup()
+
+gasto_promedio <- enigh_panel %>%
+  group_by(anio, decil) %>%
+  summarise(gasto_promedio = mean(gasto_tri, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(gasto_promedio, aes(x = as.factor(anio), y = gasto_promedio, color = as.factor(decil), group = decil)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Gasto promedio trimestral en electricidad por decil de ingreso (2016–2022)",
+    x = "Año",
+    y = "Gasto en electricidad (MXN)",
+    color = "Decil de ingreso"
+  ) +
+  theme_minimal()
+```
+```{r}
+df_encevi_2018 <- df_encevi_2018 %>%
+  mutate(tipo_tarif = factor(tipo_tarif))
+
+
+ggplot(df_encevi_2018, aes(x = tipo_tarif, y = cons_elect)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Distribución del gasto en electricidad por tipo de tarifa",
+       x = "Tipo de tarifa eléctrica",
+       y = "Gasto mensual en electricidad (MXN)") +
+  theme_minimal()
+```
+```{r}
+df_encevi_2018 %>%
+  group_by(tipo_tarif) %>%
+  summarise(gasto_prom = mean(cons_elect, na.rm = TRUE)) %>%
+  ggplot(aes(x = tipo_tarif, y = gasto_prom, fill = tipo_tarif)) +
+  geom_col() +
+  labs(title = "Gasto promedio en electricidad por tipo de tarifa",
+       x = "Tipo de tarifa",
+       y = "Gasto promedio (MXN)") +
+  theme_minimal() +
+  guides(fill = "none")
+
+```
+```{r}
+ggplot(df_encevi_2018, aes(x = cons_elect, color = tipo_tarif)) +
+  geom_density() +
+  labs(title = "Distribución del gasto por tipo de tarifa",
+       x = "Gasto mensual (MXN)",
+       y = "Densidad") +
+  theme_minimal()
+```
+
+
+INTENTO DE REGRESIÓN TIPO PANEL FALLIDO (TENGO QUE ARREGLAR EL CÓDIGO PORQUE POR ALGUNA RAZÓN DETECTA 96 ENTIDADES)
+```{r}
+enigh <- bind_rows(enigh_2016, enigh_2018, enigh_2020, enigh_2022)
+enigh <- enigh %>%
+  mutate(folioviv = as.character(folioviv))
+
+panel_ids <- enigh %>%
+  group_by(folioviv) %>%
+  summarise(n_anios = n_distinct(anio)) %>%
+  filter(n_anios == 2)
+
+enigh_panel <- enigh %>%
+  filter(folioviv %in% panel_ids$folioviv)
+
+enigh_panel <- enigh_panel %>%
+  mutate(entidad = substr(folioviv, 1, 2)) %>%
+  mutate(factor = factor(entidad))
+
+lm(gasto_tri ~ anio + ingreso_total + factor(entidad), data = enigh_panel)
+
+```
